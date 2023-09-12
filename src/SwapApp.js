@@ -182,6 +182,19 @@ function SwapApp() {
     const usdtBalance = useSplTokenBalance(usdtMint)
     const sparkBalance = useSplTokenBalance(sparkMint)
 
+    const [usdtReserves, setUsdtReserves] = useState("0.0")
+    useEffect(() => {
+        if (!swapper?.tokenAccountB) return;
+        connection.getTokenAccountBalance(swapper.tokenAccountB).then(
+            result => setUsdtReserves(result.value.uiAmountString),
+            error => {
+                if (error.code === -32602) {
+                    setUsdtReserves("0.0")
+                }
+            }
+        )
+    }, [swapper])
+
     const [sparkBalanceIn, setSparkBalanceIn] = useState("0.0")
 
     const swapIxArr = useSwapIxArrBuilder(swapper, sparkBalanceIn)
@@ -211,6 +224,7 @@ function SwapApp() {
                 <>
                     <p>Your USDT balance: {usdtBalance === null ? "..." : usdtBalance}</p>
                     <p>Your SPARK balance: {sparkBalance === null ? "..." : sparkBalance}</p>
+                    <p>Exchange USDT reserves: {usdtReserves}</p>
                     {!swapper ? "Preparing..." :
                         <p>
                             <label>SPARKS to exchange: <input type="text" value={sparkBalanceIn} onChange={e => setSparkBalanceIn(e.target.value)}></input></label>

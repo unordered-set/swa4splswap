@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { UnsafeBurnerWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { SnowflakeSafeWalletAdapter } from '@snowflake-so/wallet-adapter-snowflake';
 import {
   WalletModalProvider,
   WalletDisconnectButton,
@@ -9,6 +10,7 @@ import {
 } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
 import SwapApp from "./SwapApp"
+import AdminApp from "./AdminApp"
 
 require('@solana/wallet-adapter-react-ui/styles.css');
 
@@ -17,10 +19,12 @@ function App() {
   const network = process.env.REACT_APP_SOLANA_CLUSTER;
 
   // You can also provide a custom RPC endpoint.
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  // const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
+  const isAdminView = window.location.href.indexOf("/admin") >= 0;
   const wallets = useMemo(
-    () => [
+    () => {
+      const result = [
       /**
        * Wallets that implement either of these standards will be available automatically.
        *
@@ -34,19 +38,25 @@ function App() {
        * in the npm package `@solana/wallet-adapter-wallets`.
        */
       new UnsafeBurnerWalletAdapter(),
-    ],
+      ];
+      if (isAdminView) {
+        result.push(
+          new SnowflakeSafeWalletAdapter()
+        )
+      }
+      return result;
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [network]
+    [network, isAdminView]
   );
   return (
-
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           <WalletMultiButton />
           <WalletDisconnectButton />
           <div className="App">
-            <SwapApp />
+            { isAdminView ? <AdminApp /> : <SwapApp /> }
           </div>
         </WalletModalProvider>
       </WalletProvider>

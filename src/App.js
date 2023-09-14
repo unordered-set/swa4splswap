@@ -19,7 +19,7 @@ function App() {
   const network = process.env.REACT_APP_SOLANA_CLUSTER;
 
   // You can also provide a custom RPC endpoint.
-  // const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
   const isAdminView = window.location.href.indexOf("/admin") >= 0;
   const wallets = useMemo(

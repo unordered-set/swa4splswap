@@ -1,10 +1,11 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, VersionedTransaction, TransactionMessage, Transaction } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction, TransactionMessage, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 
 // Yes, via require: https://github.com/webpack/webpack/issues/12040
-const { TokenSwap } = require("@solana/spl-token-swap")
+const { TokenSwap, CurveType } = require("@solana/spl-token-swap")
+const { struct, u8, blob } = require('@solana/buffer-layout');
 
 function AdminApp() {
     const { connection } = useConnection();
@@ -52,13 +53,7 @@ function AdminApp() {
             context: { slot: minContextSlot },
             value: { blockhash, lastValidBlockHeight }
         } = await connection.getLatestBlockhashAndContext();
-        // const messageV0 = new TransactionMessage({
-        //     payerKey: publicKey,
-        //     recentBlockhash: blockhash,
-        //     instructions: [ix],
-        // }).compileToV0Message();
 
-        // const transactionV0 = new VersionedTransaction(messageV0);
         const tx = new Transaction()
         tx.blockhash = blockhash;
         tx.feePayer = publicKey;
@@ -71,9 +66,69 @@ function AdminApp() {
                 name: `Add ${usdtToAddAmount} USDT to exchange`
             }
         )
-        // const signature = await sendTransaction(transactionV0, connection, { minContextSlot });
-        //await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature });
     }, [swapper, usdtToAddAmount, publicKey, connection])
+
+    const [fee, setFee] = useState("0.0")
+    const setFeeHandler = useCallback(async () => {
+        const keys = [
+            { pubkey: swapper.tokenSwap, isSigner: false, isWritable: true },
+            { pubkey: swapper.feeAccount, isSigner: false, isWritable: false },
+            { pubkey: publicKey, isSigner: true, isWritable: false },
+        ];
+
+        const commandDataLayout = struct([
+            u8('instruction'),
+            u8('curveType'),
+            blob(32, 'curveParameters')
+        ]);
+
+        // 980 - 1 usdt -> 1.02 spark
+        const curveParameters = new Uint8Array([
+            0xfc, 0x03, 0, 0, 0, 0, 0, 0
+        ])
+
+        let data = Buffer.alloc(1024);
+
+        // package curve parameters
+        // NOTE: currently assume all curves take a single parameter, u64 int
+        //       the remaining 24 of the 32 bytes available are filled with 0s
+        let curveParamsBuffer = Buffer.alloc(32);
+        Buffer.from(curveParameters).copy(curveParamsBuffer);
+
+        const encodeLength = commandDataLayout.encode(
+            {
+                instruction: 6, // Update Curve instruction
+                curveType: CurveType.ConstantPrice,
+                curveParameters: curveParamsBuffer,
+            },
+            data,
+        );
+        data = data.slice(0, encodeLength);
+
+        const ixChangeRate = new TransactionInstruction({
+            keys,
+            programId: exchangeProgramId,
+            data,
+        });
+
+        const {
+            context: { slot: minContextSlot },
+            value: { blockhash, lastValidBlockHeight }
+        } = await connection.getLatestBlockhashAndContext();
+
+        const tx = new Transaction()
+        tx.blockhash = blockhash;
+        tx.feePayer = publicKey;
+        tx.add(ixChangeRate)
+
+        await sendTransaction(
+            tx,
+            null,
+            {
+                name: `Set Fee ${fee}`
+            }
+        )
+    }, [swapper, fee, publicKey, connection])
 
     return (<>
         <h1>Hello, Admin!</h1>
@@ -82,6 +137,10 @@ function AdminApp() {
         <p>
             <input type="text" value={usdtToAddAmount} onChange={e => setUsdtToAddAmount(e.target.value)} />
             <button disabled={!swapper} onClick={addUsdtHandler}>OK</button>
+        </p>
+        <p>
+            <input type="text" value={fee} onChange={e => setFee(e.target.value)} />
+            <button disabled={!swapper} onClick={setFeeHandler}>OK</button>
         </p>
     </>
     )
